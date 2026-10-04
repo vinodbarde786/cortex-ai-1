@@ -74,9 +74,21 @@ export interface AdminRole {
   id: string;
   user_id: string;
   email: string;
+  name: string | null;
   role: 'super_admin' | 'sub_admin';
   permissions: Record<string, boolean>;
   is_active: boolean;
+  last_login: string | null;
+  created_at: string;
+}
+
+export interface AdminActivityLog {
+  id: string;
+  admin_email: string;
+  admin_name: string | null;
+  action_type: string;
+  message: string;
+  severity: 'info' | 'warning' | 'critical' | 'success';
   created_at: string;
 }
 
