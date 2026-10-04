@@ -114,4 +114,15 @@ export interface BotTemplate {
   is_public: boolean;
   total_copies: number;
   created_at: string;
+  bot_type: 'scalper' | 'dca' | 'grid' | 'copier' | null;
+  execution_mode: 'auto' | 'manual' | null;
+  strategies: string[] | null;
+  indicators: string[] | null;
+  max_drawdown_pct: number | null;
+  tp_sl_ratio: number | null;
+  max_leverage: number | null;
+  source_exchanges: string[] | null;
+  overall_pnl: number | null;
+  active_users: number | null;
+  status: 'active' | 'paused' | null;
 }
