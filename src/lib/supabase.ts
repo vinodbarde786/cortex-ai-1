@@ -67,6 +67,7 @@ export interface License {
   valid_from: string;
   valid_until: string | null;
   monthly_fee: number;
+  license_key: string | null;
   created_at: string;
 }
 

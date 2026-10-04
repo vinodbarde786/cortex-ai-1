@@ -3,7 +3,7 @@ import {
   Users, Search, TrendingUp, TrendingDown,
   DollarSign, Bot, Pencil, Trash2, LogIn, X, Check, Zap, Shield,
   Calendar, ChevronDown, ChevronUp, Crown, Sparkles, AlertTriangle, UserCog,
-  KeyRound, ToggleRight,
+  KeyRound, ToggleRight, Rocket, Clock, Plus, Minus,
 } from 'lucide-react';
 import {
   adminClients, type AdminClient,
@@ -41,6 +41,11 @@ export default function AdminClients() {
   const [editIndicators, setEditIndicators] = useState<string[]>([]);
   const [editValidUntil, setEditValidUntil] = useState('');
 
+  // Edit modal subscription state
+  const [editPlan, setEditPlan] = useState<string>('Starter');
+  const [editExpiry, setEditExpiry] = useState('');
+  const [extendMonths, setExtendMonths] = useState(0);
+
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortAsc(!sortAsc);
     else { setSortField(field); setSortAsc(false); }
@@ -63,6 +68,9 @@ export default function AdminClients() {
 
   const openEdit = (client: AdminClient) => {
     setSelected(client);
+    setEditPlan(client.plan);
+    setEditExpiry(client.licenseValidUntil);
+    setExtendMonths(0);
     setModalMode('edit');
   };
 
@@ -100,6 +108,24 @@ export default function AdminClients() {
       unlockedStrategies: editStrategies,
       unlockedIndicators: editIndicators,
       licenseValidUntil: editValidUntil || c.licenseValidUntil,
+    } : c));
+    closeModal();
+  };
+
+  const saveEdit = () => {
+    if (!selected) return;
+    let newExpiry = editExpiry;
+    if (extendMonths > 0) {
+      const base = new Date(editExpiry);
+      base.setMonth(base.getMonth() + extendMonths);
+      newExpiry = base.toISOString().split('T')[0];
+    }
+    const planBotLimits: Record<string, number> = { Starter: 2, Pro: 8, Enterprise: 25 };
+    setClients(prev => prev.map(c => c.id === selected.id ? {
+      ...c,
+      plan: editPlan,
+      licenseValidUntil: newExpiry,
+      botLimit: planBotLimits[editPlan] ?? c.botLimit,
     } : c));
     closeModal();
   };
@@ -302,44 +328,167 @@ export default function AdminClients() {
 
       {/* Edit Client Modal */}
       {modalMode === 'edit' && selected && (
-        <ModalShell onClose={closeModal} title="Edit Client" icon={UserCog} accent="cyan">
-          <div className="space-y-4">
+        <ModalShell onClose={closeModal} title="Edit Client" icon={UserCog} accent="cyan" wide>
+          <div className="space-y-5">
+            {/* Client header */}
             <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03]">
               <div className="w-10 h-10 rounded-xl bg-white/[0.05] border border-white/[0.06] flex items-center justify-center text-xs font-bold text-slate-300">
                 {selected.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-semibold text-white">{selected.name}</p>
                 <p className="text-[10px] text-slate-500">{selected.email}</p>
               </div>
+              <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${statusConfig[selected.status]} capitalize`}>{selected.status}</span>
             </div>
-            <Field label="Client Name">
-              <input defaultValue={selected.name} className="modal-input" />
-            </Field>
-            <Field label="Email">
-              <input defaultValue={selected.email} className="modal-input" />
-            </Field>
-            <Field label="Country">
-              <input defaultValue={selected.country} className="modal-input" />
-            </Field>
-            <Field label="Status">
-              <select defaultValue={selected.status} className="modal-input">
-                <option value="active" className="bg-base-850">Active</option>
-                <option value="suspended" className="bg-base-850">Suspended</option>
-                <option value="banned" className="bg-base-850">Banned</option>
-              </select>
-            </Field>
-            <Field label="Manual Trading">
-              <div className="flex items-center gap-2">
-                <ToggleRight className="w-7 h-7 text-neon-green" />
-                <span className="text-sm text-slate-300">{selected.manualTrading ? 'Enabled' : 'Disabled'}</span>
-              </div>
-            </Field>
+
+            {/* Basic Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Client Name">
+                <input defaultValue={selected.name} className="modal-input" />
+              </Field>
+              <Field label="Email">
+                <input defaultValue={selected.email} className="modal-input" />
+              </Field>
+              <Field label="Country">
+                <input defaultValue={selected.country} className="modal-input" />
+              </Field>
+              <Field label="Status">
+                <select defaultValue={selected.status} className="modal-input">
+                  <option value="active" className="bg-base-850">Active</option>
+                  <option value="suspended" className="bg-base-850">Suspended</option>
+                  <option value="banned" className="bg-base-850">Banned</option>
+                </select>
+              </Field>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <InfoBox label="Total Funds" value={formatCurrency(selected.totalFunds)} icon={DollarSign} color="text-neon-cyan" />
               <InfoBox label="Active Bots" value={`${selected.activeBots}/${selected.botLimit}`} icon={Bot} color="text-neon-amber" />
             </div>
-            <ModalButtons onCancel={closeModal} onConfirm={closeModal} confirmLabel="Save Changes" confirmAccent="cyan" />
+
+            {/* ===== Subscription Management Section ===== */}
+            <div className="pt-2 border-t border-white/[0.06]">
+              <div className="flex items-center gap-2 mb-1">
+                <KeyRound className="w-4 h-4 text-neon-amber" />
+                <h3 className="text-sm font-bold text-white">Subscription Management</h3>
+              </div>
+              <p className="text-[11px] text-slate-500 mb-4">Instantly change the client's plan tier and extend their subscription validity</p>
+
+              {/* Current plan vs new plan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500 uppercase mb-1">Current Plan</p>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const PCIcon = planConfig[selected.plan]?.icon ?? Zap;
+                      return <PCIcon className={`w-4 h-4 ${planConfig[selected.plan]?.color ?? 'text-slate-400'}`} />;
+                    })()}
+                    <span className={`text-sm font-bold ${planConfig[selected.plan]?.color ?? 'text-slate-300'}`}>{selected.plan}</span>
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-neon-amber/5 border border-neon-amber/15">
+                  <p className="text-[10px] text-neon-amber/70 uppercase mb-1">Current Expiry</p>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-neon-amber" />
+                    <span className="text-sm font-mono text-slate-200">
+                      {new Date(selected.licenseValidUntil).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Plan selector */}
+              <div>
+                <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase mb-2 block">Change Plan Tier</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { tier: 'Starter', icon: Zap, color: 'text-neon-cyan', bg: 'bg-neon-cyan/10', border: 'border-neon-cyan/40', desc: '2 bots' },
+                    { tier: 'Pro', icon: Rocket, color: 'text-neon-green', bg: 'bg-neon-green/10', border: 'border-neon-green/40', desc: '8 bots' },
+                    { tier: 'Enterprise', icon: Crown, color: 'text-neon-amber', bg: 'bg-neon-amber/10', border: 'border-neon-amber/40', desc: '25 bots' },
+                  ].map(plan => {
+                    const PIcon = plan.icon;
+                    const isSelected = editPlan === plan.tier;
+                    return (
+                      <button
+                        key={plan.tier}
+                        onClick={() => setEditPlan(plan.tier)}
+                        className={`relative p-3 rounded-xl border text-center transition-all overflow-hidden ${
+                          isSelected ? `${plan.bg} ${plan.border}` : 'bg-white/[0.03] border-white/[0.06] hover:border-white/[0.12]'
+                        }`}
+                      >
+                        <PIcon className={`w-5 h-5 mx-auto mb-1.5 ${isSelected ? plan.color : 'text-slate-400'}`} />
+                        <p className={`text-xs font-bold ${isSelected ? plan.color : 'text-slate-300'}`}>{plan.tier}</p>
+                        <p className="text-[9px] text-slate-500 mt-0.5">{plan.desc}</p>
+                        {isSelected && editPlan !== selected.plan && (
+                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-neon-amber animate-pulse" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {editPlan !== selected.plan && (
+                  <div className="mt-2 p-2 rounded-lg bg-neon-amber/5 border border-neon-amber/15 flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-neon-amber flex-shrink-0" />
+                    <span className="text-[11px] text-neon-amber">Plan will change from {selected.plan} to {editPlan}. Bot limit will update automatically.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Extend validity */}
+              <div className="mt-4">
+                <label className="text-[10px] font-bold tracking-wider text-slate-500 uppercase mb-2 block flex items-center gap-1.5">
+                  <Clock className="w-3 h-3" /> Extend Subscription
+                </label>
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    onClick={() => setExtendMonths(Math.max(0, extendMonths - 1))}
+                    className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.07] flex items-center justify-center transition-all active:scale-90"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <div className="flex-1 h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
+                    <span className="text-sm font-bold text-neon-amber font-mono">+{extendMonths} month{extendMonths !== 1 ? 's' : ''}</span>
+                  </div>
+                  <button
+                    onClick={() => setExtendMonths(Math.min(36, extendMonths + 1))}
+                    className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] text-slate-300 hover:bg-white/[0.07] flex items-center justify-center transition-all active:scale-90"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[0, 1, 3, 6, 12].map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setExtendMonths(m)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                        extendMonths === m
+                          ? 'bg-neon-amber/20 text-neon-amber border border-neon-amber/30'
+                          : 'bg-white/[0.03] text-slate-500 hover:text-slate-300 border border-transparent'
+                      }`}
+                    >
+                      {m === 0 ? 'No extension' : `+${m}m`}
+                    </button>
+                  ))}
+                </div>
+                {/* New expiry preview */}
+                {extendMonths > 0 && (() => {
+                  const base = new Date(editExpiry);
+                  base.setMonth(base.getMonth() + extendMonths);
+                  return (
+                    <div className="mt-3 p-3 rounded-xl bg-neon-green/5 border border-neon-green/15 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">New expiry date</span>
+                      <span className="text-sm font-mono font-bold text-neon-green">
+                        {base.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <ModalButtons onCancel={closeModal} onConfirm={saveEdit} confirmLabel="Save Changes" confirmAccent="cyan" />
           </div>
         </ModalShell>
       )}
